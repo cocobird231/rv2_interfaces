@@ -1,0 +1,19 @@
+# QoS Profile Requisition
+
+# Given topic name or "all" for all topics.
+string topic_name
+
+## Set to QOS_TYPE_XXX from vehicle_interfaces/msg/TopicQosProfile.msg
+uint8 qos_type
+
+bool grab_tmp_qmap 0
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# Topic QoS Profile Setting
+TopicQosProfile[] topic_qos_profile_vec

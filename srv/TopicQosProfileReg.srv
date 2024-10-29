@@ -1,0 +1,20 @@
+# QoS Profile Registration
+
+## Remove topic_name profile in temporary qmap. If true, server will ignore this QoS profile
+bool remove_profile 0
+
+## Clear temporary qmap. If true, server will ignore this QoS profile. 
+bool clear_profiles 0
+
+## Set ture if all QoS profile setting completed. If true, server will ignore this QoS profile
+bool save_qmap 0
+
+# QoS Profile Setting
+TopicQosProfile topic_qos_profile
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason

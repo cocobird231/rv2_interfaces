@@ -1,0 +1,14 @@
+# Procedure status request message
+
+# The procedure name. If empty, all procedures are requested.
+string proc_name
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# The procedure status
+ProcStatus[] proc_status_vec

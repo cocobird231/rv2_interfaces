@@ -1,0 +1,9 @@
+# The device information to be registered.
+NodeAddr node_addr
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason

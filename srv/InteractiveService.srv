@@ -1,0 +1,24 @@
+# Set service interaction.
+
+# Request device id.
+string device_id
+
+# InteractiveService signals.
+InteractiveService interactive_service
+
+# The function name could be variant for different services, and user should define the function name for each service.
+string service_command_name
+
+# The arguments could be variant for different services, and user should define the arguments for each service.
+string[] service_command_args
+
+---
+# response is true if value accepted, otherwise server ignore the request and response false.
+## Returns true if request success. Otherwise, returns false if:
+## 1. Service is not interactable.
+## 2. The <device_id> does not have the privilege.
+## 3. The <service_command_name> not implemented.
+bool response
+
+# If <response> response flase, describes the reason.
+string reason

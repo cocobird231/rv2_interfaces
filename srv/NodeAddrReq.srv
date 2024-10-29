@@ -1,0 +1,13 @@
+# Device information (Filled at least one of the elements, or set node_name to "all" to get all info)
+NodeAddr node_addr
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+
+# Device information
+NodeAddr[] node_addr_vec

@@ -1,0 +1,14 @@
+# Device information request service
+
+# Node address
+NodeAddr node_addr
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# Device information
+DevInfo[] dev_info_vec

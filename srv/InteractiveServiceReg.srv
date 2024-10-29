@@ -1,0 +1,14 @@
+# Register interactive service to master
+
+# The interactive service name
+string service_name
+
+# The master privilege
+InteractiveServiceMasterPrivilege privilege
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason

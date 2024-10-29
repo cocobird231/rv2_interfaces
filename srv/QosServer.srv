@@ -1,0 +1,12 @@
+# QoS server control signal
+QosServerStatus request
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# Response current QoS server status. (preserve for future use)
+QosServerStatus status

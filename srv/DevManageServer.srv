@@ -1,0 +1,12 @@
+# Device management server control signal
+DevManageServerStatus request
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# Response current device management server status.
+DevManageServerStatus status
