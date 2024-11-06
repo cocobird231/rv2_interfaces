@@ -1,7 +1,10 @@
 # Procedure status registration message
 
+# Node name
+string node_name
+
 # The procedure status
-ProcStatus[] procedure_status_vec
+ProcStatus[] proc_status_vec
 
 ---
 # Response status, see ServiceResponseStatus for more information.

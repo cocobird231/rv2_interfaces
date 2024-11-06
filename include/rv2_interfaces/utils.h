@@ -22,10 +22,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#ifndef ROS_DISTRO// 0: eloquent, 1: foxy, 2: humble
-#define ROS_DISTRO 1
-#endif
-
 // Ref: https://stackoverflow.com/a/55475023
 #ifndef __has_include
   static_assert(false, "__has_include not supported");
@@ -366,11 +362,8 @@ public:
         if (this->isPassiveModeF_)
         {
             auto result = this->cli_->async_send_request(req);
-#if ROS_DISTRO == 0
-            if (rclcpp::spin_until_future_complete(this->cliNode_, result, std::chrono::duration<double, std::milli>(timeout_ms)) == rclcpp::executor::FutureReturnCode::SUCCESS)
-#else
+
             if (rclcpp::spin_until_future_complete(this->cliNode_, result, std::chrono::duration<double, std::milli>(timeout_ms)) == rclcpp::FutureReturnCode::SUCCESS)
-#endif
             {
                 return true;
             }
@@ -731,10 +724,12 @@ public:
 
 
 template <typename RCL_NODE_TYPE>
-std::shared_ptr<RCL_NODE_TYPE> GenTmpNode(std::string prefix = "tmp_", std::string suffix = "_node")
+std::shared_ptr<RCL_NODE_TYPE> GenTmpNode(std::string prefix = "tmp_", std::string suffix = "_node", bool use_global_arguments = false)
 {
+    rclcpp::NodeOptions options;
+    options.use_global_arguments(use_global_arguments);
     auto ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    return std::make_shared<RCL_NODE_TYPE>(prefix + std::to_string(ts) + suffix);
+    return std::make_shared<RCL_NODE_TYPE>(prefix + std::to_string(ts) + suffix, options);
 }
 
 template<typename srvT>
@@ -742,6 +737,8 @@ using srvTReqPtr = std::shared_ptr<typename srvT::Request>;
 
 template<typename srvT>
 using srvTResPtr = std::shared_ptr<typename srvT::Response>;
+
+
 
 /**
  * ClientRequestHelper is a helper function to request service.
@@ -754,62 +751,81 @@ using srvTResPtr = std::shared_ptr<typename srvT::Response>;
 template<typename srvT>
 srvTResPtr<srvT> ClientRequestHelper(std::shared_ptr<rclcpp::Node> node, const std::string& serviceName, const srvTReqPtr<srvT> req, std::chrono::milliseconds timeout)
 {
-    auto client = node->create_client<srvT>(serviceName);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    auto cbg = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    auto client = node->create_client<srvT>(serviceName, rmw_qos_profile_services_default, cbg);
     auto result = client->async_send_request(req);
     auto fStatus = result.wait_for(timeout);
     if (fStatus == std::future_status::ready)
         return result.get();
-    // else if (fStatus == std::future_status::timeout)
-    //     std::cerr << "[ClientRequestHelper] Request service timeout: " << serviceName << std::endl;
-    // else
-    //     std::cerr << "[ClientRequestHelper] Request service failed: " << serviceName << std::endl;
     return nullptr;
 }
 
+
+
+/**
+ * ClientRequestHelperRawPtr is a helper function to request service.
+ * @param[in] node: The node to request the service.
+ * @param[in] serviceName: The name of the service. Should not include the namespace or '/'.
+ * @param[in] req: The request message.
+ * @param[in] timeout: The timeout duration.
+ * @return The response message. If the request is timeout or failed, return `nullptr`.
+ */
 template<typename srvT>
 srvTResPtr<srvT> ClientRequestHelperRawPtr(rclcpp::Node *node, const std::string& serviceName, const srvTReqPtr<srvT> req, std::chrono::milliseconds timeout)
 {
     auto client = node->create_client<srvT>(serviceName);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     auto result = client->async_send_request(req);
     auto fStatus = result.wait_for(timeout);
     if (fStatus == std::future_status::ready)
         return result.get();
-    // else if (fStatus == std::future_status::timeout)
-    //     std::cerr << "[ClientRequestHelper] Request service timeout: " << serviceName << std::endl;
-    // else
-    //     std::cerr << "[ClientRequestHelper] Request service failed: " << serviceName << std::endl;
     return nullptr;
 }
 
 
 
-inline void SpinNode(std::shared_ptr<rclcpp::Node> node, std::string threadName)
+/**
+ * ClientRequestHelperCbG is a helper function to request service.
+ * @param[in] node: The node to request the service.
+ * @param[in] cbg: The callback group to request the service.
+ * @param[in] serviceName: The name of the service. Should not include the namespace or '/'.
+ * @param[in] req: The request message.
+ * @param[in] timeout: The timeout duration.
+ * @return The response message. If the request is timeout or failed, return `nullptr`.
+ */
+template<typename srvT>
+srvTResPtr<srvT> ClientRequestHelperCbG(std::shared_ptr<rclcpp::Node> node, rclcpp::CallbackGroup::SharedPtr cbg, const std::string& serviceName, const srvTReqPtr<srvT> req, std::chrono::milliseconds timeout)
 {
-	std::cerr << threadName << " start..." << std::endl;
-	rclcpp::spin(node);
-	std::cerr << threadName << " exit." << std::endl;
-	rclcpp::shutdown();
+    auto client = node->create_client<srvT>(serviceName, rmw_qos_profile_services_default, cbg);
+    auto result = client->async_send_request(req);
+    auto fStatus = result.wait_for(timeout);
+    if (fStatus == std::future_status::ready)
+        return result.get();
+    return nullptr;
 }
 
-inline void SpinExecutor(std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> exec, std::string threadName, double delay_ms)
+
+
+/**
+ * ClientRequestHelperRawPtrCbG is a helper function to request service.
+ * @param[in] node: The node to request the service.
+ * @param[in] cbg: The callback group to request the service.
+ * @param[in] serviceName: The name of the service. Should not include the namespace or '/'.
+ * @param[in] req: The request message.
+ * @param[in] timeout: The timeout duration.
+ * @return The response message. If the request is timeout or failed, return `nullptr`.
+ */
+template<typename srvT>
+srvTResPtr<srvT> ClientRequestHelperRawPtrCbG(rclcpp::Node* node, rclcpp::CallbackGroup::SharedPtr cbg, const std::string& serviceName, const srvTReqPtr<srvT> req, std::chrono::milliseconds timeout)
 {
-    std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(delay_ms));
-    std::cerr << threadName << " start..." << std::endl;
-    exec->spin();
-    std::cerr << threadName << " exit." << std::endl;
+    auto client = node->create_client<srvT>(serviceName, rmw_qos_profile_services_default, cbg);
+    auto result = client->async_send_request(req);
+    auto fStatus = result.wait_for(timeout);
+    if (fStatus == std::future_status::ready)
+        return result.get();
+    return nullptr;
 }
 
-inline void SpinExecutor2(std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> exec, std::string threadName, double delay_ms, bool& isEnded)
-{
-    isEnded = false;
-    std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(delay_ms));
-    std::cerr << threadName << " start..." << std::endl;
-    exec->spin();
-    std::cerr << threadName << " exit." << std::endl;
-    isEnded = true;
-}
+
 
 inline bool ConnToService(rclcpp::ClientBase::SharedPtr client, bool& stopF, std::chrono::milliseconds timeout = std::chrono::milliseconds(1000), int retry = 5)
 {
@@ -868,6 +884,16 @@ void SafeStore(T* ptr, const T& val, std::mutex& mtx)
     *ptr = val;
 }
 
+
+
+/**
+ * ================================================================
+ * String Operation
+ * ================================================================
+ */
+
+
+
 inline std::vector<std::string> split(const std::string& str, const std::string& delimiter)
 {
     std::vector<std::string> splitStrings;
@@ -912,6 +938,16 @@ inline std::size_t replace_all(std::string& inout, std::string what, std::string
     return count;
 }
 
+
+
+/**
+ * ================================================================
+ * File Operation
+ * ================================================================
+ */
+
+
+
 inline fs::path GetHomePath()
 {
     const static uint16_t BUFF_SIZE = 256;
@@ -948,51 +984,6 @@ inline fs::path GetCurrentPath()
     return retStr;
 }
 
-inline double LinearMapping1d(double value, double from_start, double from_end, double to_start, double to_end)
-{
-    double a = (to_end - to_start) / (from_end - from_start);
-    return a * (value - from_start) + to_start;
-}
-
-inline double GammaCorrection(double value, double gamma, double min_bound = 0, double max_bound = 1)
-{
-    if (value >= min_bound && value <= max_bound && max_bound > min_bound)
-    {
-        if (min_bound == 0 && max_bound == 1)
-            return std::pow(value, gamma);
-        double ratio = (value - min_bound) / (max_bound - min_bound);
-        return std::pow(ratio, gamma) * (max_bound - min_bound) + min_bound;
-    }
-    throw "Boundary value error.";
-}
-
-inline bool LoadFileFromJSON(const fs::path& filePath, nlohmann::json& outJSON)
-{
-    try
-    {
-        outJSON.update(nlohmann::json::parse(std::ifstream(filePath)));
-        return true;
-    }
-    catch(...)
-    {
-        return false;
-    }
-}
-
-inline bool DumpJSONToFile(const fs::path& filePath, const nlohmann::json& json)
-{
-    try
-    {
-        std::ofstream outFile(filePath);
-        outFile << json;
-        return true;
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
 
 
 inline bool GetHostname(std::string& outHostname)
@@ -1018,6 +1009,8 @@ inline bool GetHostname(std::string& outHostname)
     }
     return retF;
 }
+
+
 
 inline bool GetIPv4Addr(const std::string& ifName, std::string& outIPv4)
 {
@@ -1050,6 +1043,8 @@ inline bool GetIPv4Addr(const std::string& ifName, std::string& outIPv4)
     return retF;
 }
 
+
+
 inline bool GetMACAddr(const std::string& ifName, std::string& outMAC)
 {
     char buf[128];
@@ -1079,6 +1074,65 @@ inline bool GetMACAddr(const std::string& ifName, std::string& outMAC)
         pclose(fp);
     }
     return retF;
+}
+
+
+
+inline bool LoadFileFromJSON(const fs::path& filePath, nlohmann::json& outJSON)
+{
+    try
+    {
+        outJSON.update(nlohmann::json::parse(std::ifstream(filePath)));
+        return true;
+    }
+    catch(...)
+    {
+        return false;
+    }
+}
+
+
+
+inline bool DumpJSONToFile(const fs::path& filePath, const nlohmann::json& json)
+{
+    try
+    {
+        std::ofstream outFile(filePath);
+        outFile << json;
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+
+
+/**
+ * ================================================================
+ * Value Mapping Operation
+ * ================================================================
+ */
+
+
+
+inline double LinearMapping1d(double value, double from_start, double from_end, double to_start, double to_end)
+{
+    double a = (to_end - to_start) / (from_end - from_start);
+    return a * (value - from_start) + to_start;
+}
+
+inline double GammaCorrection(double value, double gamma, double min_bound = 0, double max_bound = 1)
+{
+    if (value >= min_bound && value <= max_bound && max_bound > min_bound)
+    {
+        if (min_bound == 0 && max_bound == 1)
+            return std::pow(value, gamma);
+        double ratio = (value - min_bound) / (max_bound - min_bound);
+        return std::pow(ratio, gamma) * (max_bound - min_bound) + min_bound;
+    }
+    throw "Boundary value error.";
 }
 
 }

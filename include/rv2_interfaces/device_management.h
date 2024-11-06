@@ -35,7 +35,7 @@
 #include <nlohmann/json.hpp>
 
 #define DevManageNode_ISrvName(serviceName) (std::string)serviceName + "_devmanage_isrv"
-#define DevManageNode_ProcStatusReqSrvName(serviceName) (std::string)serviceName + "_ps_Req"
+#define DevManageServer_ProcStatusRegSrvName(serviceName) (std::string)serviceName + "_ps_Reg"
 #define DevManageServer_NodeAddrRegSrvName(serviceName) (std::string)serviceName + "_nodeaddr_Reg"
 #define DevManageServer_NodeAddrReqSrvName(serviceName) (std::string)serviceName + "_nodeaddr_Req"
 #define DevManageServer_DevInfoReqSrvName(serviceName) (std::string)serviceName + "_devinfo_Req"
@@ -65,7 +65,6 @@ using namespace std::chrono_literals;
  *      - Created Services:
  *          <nodeName>_devmanage_isrv        : The InteractiveService service for the DevManageNode.
  *          <nodeName>_devmanage_isrv_Req    : The InteractiveService status request service for the DevManageNode.
- *          <nodeName>_ps_Req                 : The procedure status request service for the DevManageNode.
  * ------------------------------------------------------------------------------------------------
  * DevManageServer:
  *      The Device Management Service is used to manage the device information and the procedure status, 
@@ -78,10 +77,11 @@ using namespace std::chrono_literals;
  *          None.
  * 
  *      - Created Services:
- *          <service_name> :                The DevManageServer control service.
- *          <service_name>_nodeaddr_Reg :   The node address registration service.
- *          <service_name>_nodeaddr_Req :   The node address request service.
- *          <service_name>_devinfo_Req :    The device information request service.
+ *          <service_name>              : The DevManageServer control service.
+ *          <service_name>_ps_Reg       : The procedure status registration service.
+ *          <service_name>_nodeaddr_Reg : The node address registration service.
+ *          <service_name>_nodeaddr_Req : The node address request service.
+ *          <service_name>_devinfo_Req  : The device information request service.
  * ------------------------------------------------------------------------------------------------
  * InteractiveService Command:
  *      - "node_exit" : Exit the DevManageNode.
@@ -490,21 +490,21 @@ inline DevManageForceExit CvtInteractiveServiceCommandArgsToDevManageForceExit(c
  */
 
 
+
 /**
  *      The class is used to register the device information to the DevManageServer, 
  *      and provide the procedure monitoring service.
  *      For nodes that need to join the DevManageServer, they should inherit the DevManageNode class.
  * 
  *      - Created Nodes:
- *          <nodeName>_devmanage_isrv : The InteractiveService for the DevManageNode.
+ *          None.
  * 
  *      - Created Topics:
  *          None.
  * 
  *      - Created Services:
- *          <nodeName>_devmanage_isrv :        The InteractiveService service for the DevManageNode.
- *          <nodeName>_devmanage_isrv_Req :    The InteractiveService status request service for the DevManageNode.
- *          <nodeName>_ps_Req :                 The procedure status request service for the DevManageNode.
+ *          <nodeName>_devmanage_isrv        : The InteractiveService service for the DevManageNode.
+ *          <nodeName>_devmanage_isrv_Req    : The InteractiveService status request service for the DevManageNode.
  */
 class DevManageNode : virtual public rclcpp::Node
 {
@@ -527,11 +527,58 @@ private:
     rv2_interfaces::unique_thread mForceExitTh_;// InteractiveService command thread.
 
     // Procedure status monitor service
-    rclcpp::Service<srv::ProcStatusReq>::SharedPtr mPSReqSrv_;// Procedure status request service.
+    rclcpp::Client<srv::ProcStatusReg>::SharedPtr mPSRegCli_;// Procedure status registration client.
+    rclcpp::CallbackGroup::SharedPtr mPSRegCbG_;// Procedure status registration callback group.
+    std::shared_ptr<rv2_interfaces::LiteTimer> mPSRegTm_;// Procedure status registration timer.
+    std::chrono::nanoseconds mPSRegTmPeriod_ns_;// Procedure status registration timer period.
 
     // Node enable
     std::atomic<bool> mNodeEnableF_;
     std::atomic<bool> mExitF_;
+
+public:
+    DevManageNode(const std::string& nodeName, const rclcpp::NodeOptions & options) : 
+        rclcpp::Node(nodeName, options), 
+        mNodeEnableF_(false), 
+        mExitF_(false)
+    {
+        // Get parameters.
+        double procStatusRegPeriod_ms = -1.0;
+        GetParamRawPtr(this, "devManageService", mDevManageSrvName_, mDevManageSrvName_, "devManageService: ", false);
+        GetParamRawPtr(this, "devInterface", mIfName_, mIfName_, "devInterface: ", false);
+        GetParamRawPtr(this, "procStatusRegPeriod_ms", procStatusRegPeriod_ms, procStatusRegPeriod_ms, "procStatusRegPeriod_ms: ", false);
+        mNodeName_ = this->get_name();
+
+        if (mDevManageSrvName_ == "" || mIfName_ == "")
+        {
+            RCLCPP_WARN(this->get_logger(), "[DevManageNode] Ignored.");
+            return;
+        }
+
+        if (procStatusRegPeriod_ms > 0)
+        {
+            mPSRegTmPeriod_ns_ = std::chrono::milliseconds((int)procStatusRegPeriod_ms);
+            mPSRegCbG_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            mPSRegCli_ = this->create_client<srv::ProcStatusReg>(DevManageServer_ProcStatusRegSrvName(mDevManageSrvName_), rmw_qos_profile_services_default, mPSRegCbG_);
+            mPSRegTm_ = rv2_interfaces::make_unique_timer(procStatusRegPeriod_ms, std::bind(&DevManageNode::_psRegTmCb, this));
+            mPSRegTm_->start();
+            RCLCPP_INFO(this->get_logger(), "[DevManageNode] Procedure status registration timer started.");
+        }
+        else
+            RCLCPP_WARN(this->get_logger(), "[DevManageNode] Ignore procedure status registration.");
+
+        mNodeAddr_.node_name = mNodeName_;
+        mCollectNodeAddrTh_ = rv2_interfaces::make_unique_thread(&DevManageNode::_collectNodeAddr, this);
+
+        RCLCPP_INFO(this->get_logger(), "[DevManageNode] Constructed.");
+        mNodeEnableF_.store(true);
+    }
+
+    ~DevManageNode()
+    {
+        mExitF_.store(true);
+        mCollectNodeAddrTh_.reset();
+    }
 
 private:
     /**
@@ -586,41 +633,6 @@ private:
             privi.requestInteractiveService = true;
             mISrv_->addMasterPrivilege(privi);
             mISrv_->addServiceCommandEventHandler("node_exit", std::bind(&DevManageNode::_forceExitEventHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-
-            // Create procedure status request service under InteractiveService.
-            mPSReqSrv_ = this->create_service<srv::ProcStatusReq>(DevManageNode_ProcStatusReqSrvName(mNodeName_), 
-                [this](const std::shared_ptr<srv::ProcStatusReq::Request> request, 
-                    std::shared_ptr<srv::ProcStatusReq::Response> response)
-                {
-                    std::lock_guard<std::mutex> pmMapLock(mPMMapMtx_);
-                    if (request->proc_name.length() > 0)// Specific procedure.
-                    {
-                        if (mPMMap_.find(request->proc_name) != mPMMap_.end())
-                        {
-                            auto& prop = mPMMap_[request->proc_name];
-                            if (std::chrono::system_clock::now() - prop.lastResponseTime > prop.timeout_ns)
-                                prop.status = PROCEDURE_STATUS_NO_RESPONSE;
-                            response->proc_status_vec.push_back(CvtProcedureStatusMsg(prop));
-                            response->response = ServiceResponseStatus::SRV_RES_SUCCESS;
-                        }
-                        else
-                        {
-                            response->response = ServiceResponseStatus::SRV_RES_IGNORED;
-                            response->reason = "Procedure not found.";
-                        }
-                    }
-                    else// All procedures.
-                    {
-                        auto now = std::chrono::system_clock::now();
-                        for (auto& [procedureName, prop] : mPMMap_)
-                        {
-                            if (now - prop.lastResponseTime > prop.timeout_ns)
-                                prop.status = PROCEDURE_STATUS_NO_RESPONSE;
-                            response->proc_status_vec.push_back(CvtProcedureStatusMsg(prop));
-                        }
-                        response->response = ServiceResponseStatus::SRV_RES_SUCCESS;
-                    }
-                });
         }
         catch (...)
         {
@@ -650,6 +662,22 @@ private:
         return ServiceResponseStatus::SRV_RES_UNKNOWN_ERROR;
     }
 
+    void _psRegTmCb()
+    {
+        auto req = std::make_shared<srv::ProcStatusReg::Request>();
+        req->node_name = mNodeName_;
+
+        auto tmp = getProcedureStatus();
+        for (const auto& [pName, proc] : tmp)
+        {
+            req->proc_status_vec.push_back(CvtProcedureStatusMsg(proc));
+        }
+        auto result = mPSRegCli_->async_send_request(req);
+        auto fStatus = result.wait_for(mPSRegTmPeriod_ns_ * 0.8);
+        if (fStatus != std::future_status::ready || result.get()->response != ServiceResponseStatus::SRV_RES_SUCCESS)
+            RCLCPP_WARN(this->get_logger(), "[DevManageNode::_psRegTmCb] Procedure status registration failed.");
+    }
+
     bool _forceExitEventHandler(InteractiveService *iSrv, const std::string deviceID, const std::vector<std::string> args)
     {
         auto prof = CvtInteractiveServiceCommandArgsToDevManageForceExit(args);
@@ -666,35 +694,6 @@ private:
     }
 
 public:
-    DevManageNode(const std::string& nodeName, const rclcpp::NodeOptions & options) : 
-        rclcpp::Node(nodeName, options), 
-        mNodeEnableF_(false), 
-        mExitF_(false)
-    {
-        // Get parameters.
-        GetParamRawPtr(this, "devManageService", mDevManageSrvName_, mDevManageSrvName_, "devManageService: ", false);
-        GetParamRawPtr(this, "devInterface", mIfName_, mIfName_, "devInterface: ", false);
-        mNodeName_ = this->get_name();
-
-        if (mDevManageSrvName_ == "" || mIfName_ == "")
-        {
-            RCLCPP_WARN(this->get_logger(), "[DevManageNode] Ignored.");
-            return;
-        }
-
-        mNodeAddr_.node_name = mNodeName_;
-        mCollectNodeAddrTh_ = rv2_interfaces::make_unique_thread(&DevManageNode::_collectNodeAddr, this);
-
-        RCLCPP_INFO(this->get_logger(), "[DevManageNode] Constructed.");
-        mNodeEnableF_.store(true);
-    }
-
-    ~DevManageNode()
-    {
-        mExitF_.store(true);
-        mCollectNodeAddrTh_.reset();
-    }
-
     bool addProcedureMonitor(const std::string& procedureName, std::chrono::nanoseconds timeout_ns)
     {
         if (!mNodeEnableF_.load())

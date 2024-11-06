@@ -83,23 +83,15 @@ ament_target_dependencies(cpplib rclcpp ${PROJECT_NAME} pybind11)
 
 set_target_properties(cpplib PROPERTIES PREFIX "")
 
-if($ENV{ROS_DISTRO} STREQUAL "foxy")
-  add_compile_options(-DROS_DISTRO=1)
+if(${MY_ROS2_DISTRO} STREQUAL "foxy")
   install(
     TARGETS cpplib
     DESTINATION lib/python3.8/site-packages/${PROJECT_NAME}
-   )
-elseif($ENV{ROS_DISTRO} STREQUAL "humble")
-  add_compile_options(-DROS_DISTRO=2)
+  )
+elseif(${MY_ROS2_DISTRO} STREQUAL "humble")
   install(
     TARGETS cpplib
     DESTINATION local/lib/python3.10/dist-packages/${PROJECT_NAME}
-   )
-else()# eloquent
-  add_compile_options(-DROS_DISTRO=0)
-  install(
-  TARGETS cpplib
-  DESTINATION lib/python3.6/site-packages/${PROJECT_NAME}
   )
 endif()
 
@@ -113,7 +105,6 @@ rosidl_generate_interfaces(${PROJECT_NAME} ${msg_content_files} ${srv_files} DEP
 ament_export_dependencies(rosidl_default_runtime)
 
 if(${MY_ROS2_DISTRO} STREQUAL "foxy")
-  add_definitions(-DFOUND_FOXY)
   install(
     DIRECTORY include/
     DESTINATION include
@@ -121,14 +112,21 @@ if(${MY_ROS2_DISTRO} STREQUAL "foxy")
   ament_export_include_directories(
     include
   )
+  install(
+    FILES requirements_apt.txt
+    DESTINATION share/${PROJECT_NAME}
+  )
 elseif(${MY_ROS2_DISTRO} STREQUAL "humble")
-  add_definitions(-DFOUND_HUMBLE)
   install(
     DIRECTORY include/
     DESTINATION include/${PROJECT_NAME}
   )
   ament_export_include_directories(
     include
+  )
+  install(
+    FILES requirements_apt.txt
+    DESTINATION share/${PROJECT_NAME}
   )
 endif()
 
