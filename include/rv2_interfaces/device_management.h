@@ -506,7 +506,7 @@ inline DevManageForceExit CvtInteractiveServiceCommandArgsToDevManageForceExit(c
  *          <nodeName>_devmanage_isrv        : The InteractiveService service for the DevManageNode.
  *          <nodeName>_devmanage_isrv_Req    : The InteractiveService status request service for the DevManageNode.
  */
-class DevManageNode : virtual public rclcpp::Node
+class BaseDevManageNode
 {
 private:
     std::string mNodeName_;// Node name.
@@ -532,51 +532,59 @@ private:
     std::shared_ptr<rv2_interfaces::LiteTimer> mPSRegTm_;// Procedure status registration timer.
     std::chrono::nanoseconds mPSRegTmPeriod_ns_;// Procedure status registration timer period.
 
+    // Force exit callback
+    std::function<void(const DevManageForceExit&)> mForceExitCb_;// Force exit callback.
+    std::atomic<bool> mForceExitCbF_;// Force exit callback flag.
+
     // Node enable
     std::atomic<bool> mNodeEnableF_;
     std::atomic<bool> mExitF_;
 
+    rclcpp::Node *mRclcppNode_;// rclcpp node pointer.
+
 public:
-    DevManageNode(const std::string& nodeName, const rclcpp::NodeOptions & options) : 
-        rclcpp::Node(nodeName, options), 
+    BaseDevManageNode(rclcpp::Node *node) : 
+        mForceExitCbF_(false), 
         mNodeEnableF_(false), 
         mExitF_(false)
     {
+        mRclcppNode_ = node;
         // Get parameters.
         double procStatusRegPeriod_ms = -1.0;
-        GetParamRawPtr(this, "devManageService", mDevManageSrvName_, mDevManageSrvName_, "devManageService: ", false);
-        GetParamRawPtr(this, "devInterface", mIfName_, mIfName_, "devInterface: ", false);
-        GetParamRawPtr(this, "procStatusRegPeriod_ms", procStatusRegPeriod_ms, procStatusRegPeriod_ms, "procStatusRegPeriod_ms: ", false);
-        mNodeName_ = this->get_name();
+        GetParamRawPtr(mRclcppNode_, "devManageService", mDevManageSrvName_, mDevManageSrvName_, "devManageService: ", false);
+        GetParamRawPtr(mRclcppNode_, "devInterface", mIfName_, mIfName_, "devInterface: ", false);
+        GetParamRawPtr(mRclcppNode_, "procStatusRegPeriod_ms", procStatusRegPeriod_ms, procStatusRegPeriod_ms, "procStatusRegPeriod_ms: ", false);
+        mNodeName_ = mRclcppNode_->get_name();
 
         if (mDevManageSrvName_ == "" || mIfName_ == "")
         {
-            RCLCPP_WARN(this->get_logger(), "[DevManageNode] Ignored.");
+            RCLCPP_WARN(mRclcppNode_->get_logger(), "[BaseDevManageNode] Ignored.");
             return;
         }
 
         if (procStatusRegPeriod_ms > 0)
         {
             mPSRegTmPeriod_ns_ = std::chrono::milliseconds((int)procStatusRegPeriod_ms);
-            mPSRegCbG_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-            mPSRegCli_ = this->create_client<srv::ProcStatusReg>(DevManageServer_ProcStatusRegSrvName(mDevManageSrvName_), rmw_qos_profile_services_default, mPSRegCbG_);
-            mPSRegTm_ = rv2_interfaces::make_unique_timer(procStatusRegPeriod_ms, std::bind(&DevManageNode::_psRegTmCb, this));
+            mPSRegCbG_ = mRclcppNode_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            mPSRegCli_ = mRclcppNode_->create_client<srv::ProcStatusReg>(DevManageServer_ProcStatusRegSrvName(mDevManageSrvName_), rmw_qos_profile_services_default, mPSRegCbG_);
+            mPSRegTm_ = rv2_interfaces::make_unique_timer(procStatusRegPeriod_ms, std::bind(&BaseDevManageNode::_psRegTmCb, this));
             mPSRegTm_->start();
-            RCLCPP_INFO(this->get_logger(), "[DevManageNode] Procedure status registration timer started.");
+            RCLCPP_INFO(mRclcppNode_->get_logger(), "[BaseDevManageNode] Procedure status registration timer started.");
         }
         else
-            RCLCPP_WARN(this->get_logger(), "[DevManageNode] Ignore procedure status registration.");
+            RCLCPP_WARN(mRclcppNode_->get_logger(), "[BaseDevManageNode] Ignore procedure status registration.");
 
         mNodeAddr_.node_name = mNodeName_;
-        mCollectNodeAddrTh_ = rv2_interfaces::make_unique_thread(&DevManageNode::_collectNodeAddr, this);
+        mCollectNodeAddrTh_ = rv2_interfaces::make_unique_thread(&BaseDevManageNode::_collectNodeAddr, this);
 
-        RCLCPP_INFO(this->get_logger(), "[DevManageNode] Constructed.");
+        RCLCPP_INFO(mRclcppNode_->get_logger(), "[BaseDevManageNode] Constructed.");
         mNodeEnableF_.store(true);
     }
 
-    ~DevManageNode()
+    ~BaseDevManageNode()
     {
         mExitF_.store(true);
+        mPSRegTm_.reset();
         mCollectNodeAddrTh_.reset();
     }
 
@@ -590,13 +598,13 @@ private:
         std::string hostName, ipv4, mac;
         while (!GetHostname(hostName) && !mExitF_.load())
             std::this_thread::sleep_for(1000ms);
-        RCLCPP_INFO(this->get_logger(), "[DevManageNode::_collectNodeAddr] Hostname: %s", hostName.c_str());
+        RCLCPP_INFO(mRclcppNode_->get_logger(), "[BaseDevManageNode::_collectNodeAddr] Hostname: %s", hostName.c_str());
         while (!GetIPv4Addr(mIfName_, ipv4) && !mExitF_.load())
             std::this_thread::sleep_for(1000ms);
-        RCLCPP_INFO(this->get_logger(), "[DevManageNode::_collectNodeAddr] IPv4: %s", ipv4.c_str());
+        RCLCPP_INFO(mRclcppNode_->get_logger(), "[BaseDevManageNode::_collectNodeAddr] IPv4: %s", ipv4.c_str());
         while (!GetMACAddr(mIfName_, mac) && !mExitF_.load())
             std::this_thread::sleep_for(1000ms);
-        RCLCPP_INFO(this->get_logger(), "[DevManageNode::_collectNodeAddr] MAC: %s", mac.c_str());
+        RCLCPP_INFO(mRclcppNode_->get_logger(), "[BaseDevManageNode::_collectNodeAddr] MAC: %s", mac.c_str());
 
         {
             std::lock_guard<std::mutex> nodeAddrLock(mNodeAddrMtx_);
@@ -623,7 +631,7 @@ private:
             InteractiveServiceInitProp iSrvProp;
             iSrvProp.targetAlive = msg::InteractiveService::TARGET_ALIVE_DISABLE;
             iSrvProp.targetActivity = msg::InteractiveService::TARGET_ACTIVITY_DISABLE;
-            mISrv_ = std::make_shared<InteractiveService>(this, DevManageNode_ISrvName(mNodeName_), iSrvProp);
+            mISrv_ = std::make_shared<InteractiveService>(mRclcppNode_, DevManageNode_ISrvName(mNodeName_), iSrvProp);
 
             InteractiveServiceMasterPrivilege privi;
             privi.masterID = mDevManageSrvName_;
@@ -632,11 +640,11 @@ private:
             privi.serviceCommandSet = { "node_exit" };
             privi.requestInteractiveService = true;
             mISrv_->addMasterPrivilege(privi);
-            mISrv_->addServiceCommandEventHandler("node_exit", std::bind(&DevManageNode::_forceExitEventHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+            mISrv_->addServiceCommandEventHandler("node_exit", std::bind(&BaseDevManageNode::_forceExitEventHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
         }
         catch (...)
         {
-            RCLCPP_ERROR(this->get_logger(), "[DevManageNode::_collectNodeAddr] Caught unexpected errors.");
+            RCLCPP_ERROR(mRclcppNode_->get_logger(), "[BaseDevManageNode::_collectNodeAddr] Caught unexpected errors.");
         }
     }
 
@@ -656,7 +664,7 @@ private:
             req->node_addr.hostname.length() <= 0)
             return ServiceResponseStatus::SRV_RES_UNKNOWN_ERROR;
 
-        auto res = ClientRequestHelperRawPtr<srv::NodeAddrReg>(this, DevManageServer_NodeAddrRegSrvName(mDevManageSrvName_), req, 500ms);
+        auto res = ClientRequestHelperRawPtr<srv::NodeAddrReg>(mRclcppNode_, DevManageServer_NodeAddrRegSrvName(mDevManageSrvName_), req, 500ms);
         if (res)
             return (ServiceResponseStatus)res->response;
         return ServiceResponseStatus::SRV_RES_UNKNOWN_ERROR;
@@ -675,25 +683,37 @@ private:
         auto result = mPSRegCli_->async_send_request(req);
         auto fStatus = result.wait_for(mPSRegTmPeriod_ns_ * 0.8);
         if (fStatus != std::future_status::ready || result.get()->response != ServiceResponseStatus::SRV_RES_SUCCESS)
-            RCLCPP_WARN(this->get_logger(), "[DevManageNode::_psRegTmCb] Procedure status registration failed.");
+            RCLCPP_WARN(mRclcppNode_->get_logger(), "[BaseDevManageNode::_psRegTmCb] Procedure status registration failed.");
     }
 
     bool _forceExitEventHandler(InteractiveService *iSrv, const std::string deviceID, const std::vector<std::string> args)
     {
         auto prof = CvtInteractiveServiceCommandArgsToDevManageForceExit(args);
-        mForceExitTh_ = rv2_interfaces::make_unique_thread(&DevManageNode::_forceExitTh, this, prof);
+        mForceExitTh_ = rv2_interfaces::make_unique_thread(&BaseDevManageNode::_forceExitTh, this, prof);
         return true;
     }
 
-    bool _forceExitTh(DevManageForceExit prof)
+    void _forceExitTh(DevManageForceExit prof)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10ms));// Wait for _forceExitEventHandler() to return.
         if (prof.delay_ms > 0)
             std::this_thread::sleep_for(std::chrono::milliseconds(prof.delay_ms));
-        exit(prof.exit_code);
+
+        if (mForceExitCbF_.load())
+            mForceExitCb_(prof);
+        else
+            raise(SIGINT);
     }
 
 public:
+    void registerForceExitCallback(const std::function<void(const DevManageForceExit&)>& callback)
+    {
+        if (!mForceExitCbF_.load())
+        {
+            mForceExitCb_ = callback;
+            mForceExitCbF_.store(true);
+        }
+    }
+
     bool addProcedureMonitor(const std::string& procedureName, std::chrono::nanoseconds timeout_ns)
     {
         if (!mNodeEnableF_.load())
@@ -728,6 +748,19 @@ public:
                 prop.status = PROCEDURE_STATUS_NO_RESPONSE;
         }
         return mPMMap_;
+    }
+};
+
+
+
+class DevManageNode : public BaseDevManageNode, virtual public rclcpp::Node
+{
+public:
+    DevManageNode(const std::string& nodeName, const rclcpp::NodeOptions & options) : 
+        BaseDevManageNode(this), 
+        rclcpp::Node(nodeName, options)
+    {
+        
     }
 };
 

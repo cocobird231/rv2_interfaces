@@ -1,4 +1,4 @@
-// #ver=0.1.1
+// #ver=0.2.1
 #pragma once
 #include <rclcpp/rclcpp.hpp>
 #include <rv2_interfaces/utils.h>
@@ -6,66 +6,49 @@
 namespace rv2_interfaces
 {
 
-/* The GenericParams class defines the generic settings for ros2 node and extended services, e.g., 
- * time sync service, safety service and qos service, etc..
- * The configure file can be stored under launch directory in each package.
- */
-class GenericParams : public rclcpp::Node
+struct GenericParams
 {
-public:
-    bool useSimTime = false;
-    std::string nodeName = "node";
-    std::string id = "0";
-    std::string devManageService = "";// devmanage_0
+    std::string devManageService = "";
     std::string devInterface = "";
-    std::string qosService = "";// qos_0
+    double procStatusRegPeriod_ms = -1.0;
+    std::string qosService = "";
     std::string qosDirPath = "";
-    std::string safetyService = "";// safety_0
-    std::string timesyncService = "";// timesync_0
-    double timesyncPeriod_ms = 10000.0;
-    double timesyncAccuracy_ms = 2.0;
+    std::string safetyService = "";
+    std::string timesyncService = "";
+    double timesyncPeriod_ms = -1.0;
+    double timesyncAccuracy_ms = -1.0;
     bool timesyncWaitService = false;
-
-public:
-    GenericParams(std::string nodeName) : Node(nodeName)
-    {
-        this->getParam("nodeName", this->nodeName, this->nodeName, "nodeName: ", false);
-        this->getParam("id", id, id, "Node ID: ", false);
-        this->getParam("use_sim_time", useSimTime, useSimTime, "Use sim time: ", false, true);
-        this->getParam("devManageService", devManageService, devManageService, "Device manage service: ", false);
-        this->getParam("devInterface", devInterface, devInterface, "Device interface: ", false);
-        this->getParam("qosService", qosService, qosService, "QoS service: ", false);
-        this->getParam("qosDirPath", qosDirPath, qosDirPath, "QoS directory path: ", false);
-        this->getParam("safetyService", safetyService, safetyService, "Safety service: ", false);
-        this->getParam("timesyncService", timesyncService, timesyncService, "Time sync service: ", false);
-        this->getParam("timesyncPeriod_ms", timesyncPeriod_ms, timesyncPeriod_ms, "Time sync period (ms): ", false);
-        this->getParam("timesyncAccuracy_ms", timesyncAccuracy_ms, timesyncAccuracy_ms, "Time sync accuracy (ms): ", false);
-        this->getParam("timesyncWaitService", timesyncWaitService, timesyncWaitService, "Time sync wait service: ", false);
-    }
-
-    template<typename T>
-    void getParam(std::string paramName, T defValue, T & outVal, std::string log_info, bool dynamic, bool noDeclare = false)
-    {
-        rcl_interfaces::msg::ParameterDescriptor descriptor;
-        descriptor.read_only = !dynamic;
-
-        if (!noDeclare)
-            declare_parameter(paramName, rclcpp::ParameterValue(defValue), descriptor);
-
-        if (!get_parameter(paramName, outVal))
-        {
-            RCLCPP_WARN_STREAM(get_logger(),
-                "The parameter '"
-                << paramName
-                << "' is not available or is not valid, using the default value: "
-                << rv2_interfaces::CvtSString(defValue).str());
-        }
-
-        if (!log_info.empty())
-        {
-            RCLCPP_INFO_STREAM(get_logger(), log_info << rv2_interfaces::CvtSString(outVal).str());
-        }
-    }
 };
+
+GenericParams GetGenericParams(rclcpp::Node::SharedPtr node)
+{
+    GenericParams ret;
+
+    GetParam(node, "devManageService", ret.devManageService, ret.devManageService, "devManageService: ", false);
+    GetParam(node, "devInterface", ret.devInterface, ret.devInterface, "devInterface: ", false);
+    GetParam(node, "procStatusRegPeriod_ms", ret.procStatusRegPeriod_ms, ret.procStatusRegPeriod_ms, "procStatusRegPeriod_ms: ", false);
+    GetParam(node, "qosService", ret.qosService, ret.qosService, "qosService: ", false);
+    GetParam(node, "qosDirPath", ret.qosDirPath, ret.qosDirPath, "qosDirPath: ", false);
+    GetParam(node, "safetyService", ret.safetyService, ret.safetyService, "safetyService: ", false);
+    GetParam(node, "timesyncService", ret.timesyncService, ret.timesyncService, "timesyncService: ", false);
+    GetParam(node, "timesyncPeriod_ms", ret.timesyncPeriod_ms, ret.timesyncPeriod_ms, "timesyncPeriod_ms: ", false);
+    GetParam(node, "timesyncAccuracy_ms", ret.timesyncAccuracy_ms, ret.timesyncAccuracy_ms, "timesyncAccuracy_ms: ", false);
+    GetParam(node, "timesyncWaitService", ret.timesyncWaitService, ret.timesyncWaitService, "timesyncWaitService: ", false);
+    return ret;
+}
+
+void SetGenericParams(rclcpp::Node::SharedPtr node, GenericParams params)
+{
+    SetParam(node, "devManageService", params.devManageService, false);
+    SetParam(node, "devInterface", params.devInterface, false);
+    SetParam(node, "procStatusRegPeriod_ms", params.procStatusRegPeriod_ms, false);
+    SetParam(node, "qosService", params.qosService, false);
+    SetParam(node, "qosDirPath", params.qosDirPath, false);
+    SetParam(node, "safetyService", params.safetyService, false);
+    SetParam(node, "timesyncService", params.timesyncService, false);
+    SetParam(node, "timesyncPeriod_ms", params.timesyncPeriod_ms, false);
+    SetParam(node, "timesyncAccuracy_ms", params.timesyncAccuracy_ms, false);
+    SetParam(node, "timesyncWaitService", params.timesyncWaitService, false);
+}
 
 }// namespace rv2_interfaces

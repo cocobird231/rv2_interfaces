@@ -578,6 +578,28 @@ void GetParamRawPtr(rclcpp::Node *node, std::string paramName, T defValue, T & o
 
 
 
+template<typename T>
+void SetParam(std::shared_ptr<rclcpp::Node> node, std::string paramName, T defValue, bool dynamic)
+{
+    try
+    {
+        rcl_interfaces::msg::ParameterDescriptor descriptor;
+        descriptor.read_only = !dynamic;
+        node->declare_parameter(paramName, rclcpp::ParameterValue(defValue), descriptor);
+    }
+    catch (const rclcpp::exceptions::ParameterAlreadyDeclaredException& e) { }
+    catch (...)
+    {
+        std::cerr << "Failed to set parameter: " << paramName << std::endl;
+        return;
+    }
+
+    node->set_parameter(rclcpp::Parameter(paramName, defValue));
+    RCLCPP_INFO_STREAM(node->get_logger(), rv2_interfaces::CvtSString(defValue).str());
+}
+
+
+
 class ExecNode
 {
 private:
