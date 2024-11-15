@@ -623,22 +623,22 @@ private:
     /**
      * @brief QoS update event handler.
      * @details The function is called when the interactive service server receives a QoS update request.
-     * @param[in] node Pointer to the interactive service. The node should be a MultiInteractiveTopic or InteractiveTopic.
+     * @param[in] iSrv Pointer to the interactive service. Should be MultiInteractiveTopic or InteractiveTopic.
      * @param[in] deviceID The device ID of the request sender.
      * @param[in] args The arguments of the service command function.
      */
-    bool _qosUpdateEventHandler(InteractiveService *node, const std::string deviceID, const std::vector<std::string> args)
+    bool _qosUpdateEventHandler(InteractiveService *iSrv, const std::string deviceID, const std::vector<std::string> args)
     {
         auto qos = CvtInteractiveServiceCommandArgsToRMWQoS(args);
-        if (auto qosNode = dynamic_cast<MultiInteractiveServiceWithQoS *>(node))
+        if (auto qosNode = dynamic_cast<MultiInteractiveServiceWithQoS *>(iSrv))
         {
             qosNode->setQoS(CvtRmwQoSToRclQoS(qos));
         }
-        else if (auto qosNode = dynamic_cast<InteractiveServiceWithQoS *>(node))
+        else if (auto qosNode = dynamic_cast<InteractiveServiceWithQoS *>(iSrv))
         {
             qosNode->setQoS(CvtRmwQoSToRclQoS(qos));
         }
-        std::string fileName = node->getNodeName();
+        std::string fileName = iSrv->getServiceName();
         rv2_interfaces::replace_all(fileName, "/", "_");
         nlohmann::json json;
         CvtRmwQoSToJSON(qos, json);
@@ -732,13 +732,12 @@ public:
     }
 
     /**
-     * @brief Add the interactive service to the QoSNode.
-     * @details The function adds the node information to the QoSNode.
-     * @param[in] node Pointer to the interactive service. The node should be a MultiInteractiveTopic or InteractiveTopic.
+     * @brief Add the QoS node command to the InteractiveService and record the topic device information.
+     * @param[in] iSrv Pointer to the interactive service. Should be MultiInteractiveTopic or InteractiveTopic.
      * @param[in] tryReadQoSProfile If true, the function will try to read the QoS profile from the mQoSDirPath_.
-     * @return True if the node is added to the QoSNode; false otherwise.
+     * @return True if the node command to the InteractiveService; false otherwise.
      */
-    bool addQoSServiceCommand(std::shared_ptr<InteractiveService> node, bool tryReadQoSProfile = true)
+    bool addQoSServiceCommand(std::shared_ptr<InteractiveService> iSrv, bool tryReadQoSProfile = true)
     {
         if (!mNodeEnableF_.load())
         {
@@ -746,9 +745,9 @@ public:
             return false;
         }
 
-        if (mTopicDevInfoRegister_->isExist(node->getNodeName()))
+        if (mTopicDevInfoRegister_->isExist(iSrv->getServiceName()))
         {
-            RCLCPP_WARN(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s is already added to the list.", node->getNodeName().c_str());
+            RCLCPP_WARN(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s is already added to the list.", iSrv->getServiceName().c_str());
             return false;
         }
 
@@ -760,63 +759,63 @@ public:
         privi.serviceCommandSet = { "qos_update" };
         privi.requestInteractiveService = false;
 
-        // Add master privilege to the node and add topic device information to the list.
-        if (auto topicNode = std::dynamic_pointer_cast<MultiInteractiveServiceWithQoS>(node))
+        // Add master privilege to the iSrv and add topic device information to the list.
+        if (auto topicNode = std::dynamic_pointer_cast<MultiInteractiveServiceWithQoS>(iSrv))
         {
             topicNode->addMasterPrivilege(privi);// MultiInteractiveServiceWithQoS call addMasterPrivilege() to add init master target status.
             msg::TopicDeviceInfo tInfo;
-            tInfo.node_name = topicNode->getNodeName();
+            tInfo.node_name = topicNode->getServiceName();
             tInfo.topic_name = topicNode->getTopicName();
             tInfo.qos_type = topicNode->getQoSType();
-            tInfo.manage_qos_node = mISrv_->getNodeName();
+            tInfo.manage_qos_node = mISrv_->getServiceName();
             mTopicDevInfoRegister_->add(tInfo.node_name, tInfo);
         }
-        else if (auto topicNode = std::dynamic_pointer_cast<InteractiveServiceWithQoS>(node))
+        else if (auto topicNode = std::dynamic_pointer_cast<InteractiveServiceWithQoS>(iSrv))
         {
             topicNode->addMasterPrivilege(privi);
             msg::TopicDeviceInfo tInfo;
-            tInfo.node_name = topicNode->getNodeName();
+            tInfo.node_name = topicNode->getServiceName();
             tInfo.topic_name = topicNode->getTopicName();
             tInfo.qos_type = topicNode->getQoSType();
             mTopicDevInfoRegister_->add(tInfo.node_name, tInfo);
         }
         else// Neither MultiInteractiveServiceWithQoS nor InteractiveServiceWithQoS.
         {
-            RCLCPP_WARN(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s is not a valid interactive topic node.", node->getNodeName().c_str());
+            RCLCPP_WARN(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s is not a valid interactive topic node.", iSrv->getServiceName().c_str());
             return false;
         }
 
         // Try to read QoS profile.
         if (tryReadQoSProfile)
         {
-            std::string fileName = node->getNodeName();
+            std::string fileName = iSrv->getServiceName();
             rv2_interfaces::replace_all(fileName, "/", "_");
             rmw_qos_profile_t qos = rmw_qos_profile_default;
             nlohmann::json json;
             if (LoadFileFromJSON(mQoSDirPath_ / (fileName + ".json"), json) && CvtJSONToRmwQoS(json, qos))
             {
-                RCLCPP_INFO(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s QoS profile loaded.", node->getNodeName().c_str());
+                RCLCPP_INFO(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s QoS profile loaded.", iSrv->getServiceName().c_str());
                 RCLCPP_INFO(this->get_logger(), "QoS profile: %d/%d/%d/%d\n", qos.history, qos.depth, qos.reliability, qos.durability);
-                uint8_t preStatus = node->getTargetAlive();
-                node->callTargetAliveCbFunc(mQoSSrvName_, msg::InteractiveService::TARGET_ALIVE_DISABLE);
-                if (auto topicNode = std::dynamic_pointer_cast<MultiInteractiveServiceWithQoS>(node))
+                uint8_t preStatus = iSrv->getTargetAlive();
+                iSrv->callTargetAliveCbFunc(mQoSSrvName_, msg::InteractiveService::TARGET_ALIVE_DISABLE);
+                if (auto topicNode = std::dynamic_pointer_cast<MultiInteractiveServiceWithQoS>(iSrv))
                 {
                     topicNode->setQoS(CvtRmwQoSToRclQoS(qos));
                 }
-                else if (auto topicNode = std::dynamic_pointer_cast<InteractiveServiceWithQoS>(node))
+                else if (auto topicNode = std::dynamic_pointer_cast<InteractiveServiceWithQoS>(iSrv))
                 {
                     topicNode->setQoS(CvtRmwQoSToRclQoS(qos));
                 }
-                node->callTargetAliveCbFunc(mQoSSrvName_, preStatus);
+                iSrv->callTargetAliveCbFunc(mQoSSrvName_, preStatus);
             }
             else
             {
-                RCLCPP_WARN(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s QoS profile not found.", node->getNodeName().c_str());
+                RCLCPP_WARN(this->get_logger(), "[QoSNode::addQoSServiceCommand] %s QoS profile not found.", iSrv->getServiceName().c_str());
             }
         }
 
-        node->addServiceCommandEventHandler("qos_update", std::bind(&QoSNode::_qosUpdateEventHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-        RCLCPP_INFO(this->get_logger(), "[QoSNode::addQoSServiceCommand] Add %s to list.", node->getNodeName().c_str());
+        iSrv->addServiceCommandEventHandler("qos_update", std::bind(&QoSNode::_qosUpdateEventHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+        RCLCPP_INFO(this->get_logger(), "[QoSNode::addQoSServiceCommand] Add %s to list.", iSrv->getServiceName().c_str());
         return true;
     }
 };

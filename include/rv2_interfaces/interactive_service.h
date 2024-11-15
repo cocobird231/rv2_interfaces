@@ -23,8 +23,6 @@
 #define InteractiveService_InteractiveServiceSrvName(serviceName) (std::string)serviceName
 #define InteractiveService_InteractiveServiceReqSrvName(serviceName) (std::string)serviceName + "_Req"
 
-// TODO: rename getNodeName to getServiceName.
-
 namespace rv2_interfaces
 {
 
@@ -501,9 +499,9 @@ public:
     }
 
     /**
-     * @brief Get service name. TODO: rename to getNodeName.
+     * @brief Get service name.
      */
-    std::string getNodeName() const
+    std::string getServiceName() const
     {
         return mServiceName_;
     }

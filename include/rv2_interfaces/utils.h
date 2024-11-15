@@ -69,6 +69,30 @@ shared_thread make_shared_thread(F&& f, args&&... a)
 
 
 
+struct file_deleter
+{
+    void operator()(FILE* p) const
+    {
+        if (p)
+            fclose(p);
+    }
+};
+
+using unique_file = std::unique_ptr<FILE, file_deleter>;
+
+inline std::unique_ptr<FILE, file_deleter> make_unique_file(const char* filename, const char* mode)
+{
+    return std::unique_ptr<FILE, file_deleter>(fopen(filename, mode));
+}
+
+using shared_file = std::shared_ptr<FILE>;
+
+inline std::shared_ptr<FILE> make_shared_file(const char* filename, const char* mode)
+{
+    return std::shared_ptr<FILE>(fopen(filename, mode), file_deleter());
+}
+
+
 
 // Ref: https://stackoverflow.com/a/9407521
 template<typename T>

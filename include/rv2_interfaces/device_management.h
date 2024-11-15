@@ -171,6 +171,58 @@ inline msg::ProcStatus CvtProcedureStatusMsg(const ProcedureMonitorProp& prop)
 
 
 
+/**
+ * ================================================================
+ * DevManageServerStatus Functions
+ * ================================================================
+ */
+
+
+
+inline const char* GetDevManageServerStatusNodeAddrActionStr(uint8_t status)
+{
+    switch (status)
+    {
+    case msg::DevManageServerStatus::NODE_ADDR_ACTION_NONE :
+        return "NODE_ADDR_ACTION_NONE";
+    case msg::DevManageServerStatus::NODE_ADDR_ACTION_ADD :
+        return "NODE_ADDR_ACTION_ADD";
+    case msg::DevManageServerStatus::NODE_ADDR_ACTION_REMOVE :
+        return "NODE_ADDR_ACTION_REMOVE";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+
+
+inline const char* GetDevManageServerStatusServerActionStr(uint8_t status)
+{
+    switch (status)
+    {
+    case msg::DevManageServerStatus::SERVER_ACTION_NONE :
+        return "SERVER_ACTION_NONE";
+    case msg::DevManageServerStatus::SERVER_ACTION_SET_TIMER :
+        return "SERVER_ACTION_SET_TIMER";
+    case msg::DevManageServerStatus::SERVER_ACTION_SET_PERIOD :
+        return "SERVER_ACTION_SET_PERIOD";
+    case msg::DevManageServerStatus::SERVER_ACTION_KILL_NODE :
+        return "SERVER_ACTION_KILL_NODE";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+
+
+/**
+ * ================================================================
+ * AddHierarchicalPrint Functions
+ * ================================================================
+ */
+
+
+
 inline void AddHierarchicalPrint(HierarchicalPrint& hprint, int hierarchy, const msg::ProcStatus& msg)
 {
     hprint.push(hierarchy, "[%s]", msg.proc_name.c_str());
@@ -701,7 +753,7 @@ private:
         if (mForceExitCbF_.load())
             mForceExitCb_(prof);
         else
-            raise(SIGINT);
+            exit(1);
     }
 
 public:

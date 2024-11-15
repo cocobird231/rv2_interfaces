@@ -194,6 +194,18 @@ public:
         if (this->tickTh_ && this->tickTh_->joinable())
             this->tickTh_->join();
     }
+
+    /**
+     * @brief Check if the timer is started. (Only for non-pooled timer)
+     * @return True if the timer is started, false otherwise.
+     */
+    bool isStarted() const { return this->enableF_; }
+
+    /**
+     * @brief Get the period of the timer.
+     * @return Period of the timer in milliseconds.
+     */
+    double getPeriod() const { return this->period_.count() / 1000000.0; }
 };
 
 
