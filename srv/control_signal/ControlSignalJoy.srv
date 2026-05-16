@@ -1,0 +1,9 @@
+# Message definition for control signal service using sensors_msgs/Joy as the request message.
+
+sensor_msgs/Joy data
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason

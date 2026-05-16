@@ -21,6 +21,8 @@ if(${MY_ROS2_DISTRO} STREQUAL "foxy")
   add_definitions(-DFOUND_FOXY)
 elseif(${MY_ROS2_DISTRO} STREQUAL "humble")
   add_definitions(-DFOUND_HUMBLE)
+elseif(${MY_ROS2_DISTRO} STREQUAL "jazzy")
+  add_definitions(-DFOUND_JAZZY)
 else()
   message(FATAL_ERROR "ROS_DISTRO is not found or not supported.")
 endif()
@@ -34,6 +36,13 @@ find_package(rosidl_default_generators REQUIRED)
 
 
 
+set(msg_files
+  "msg/control_signal/ControlSignalConst.msg"
+  "msg/control_signal/ControlSignalInfo.msg"
+)
+
+
+
 set(msg_content_files
   "msg_content/DevInfo.msg"
   "msg_content/DevManageServerStatus.msg"
@@ -43,9 +52,12 @@ set(msg_content_files
   "msg_content/ProcStatus.msg"
   "msg_content/QosProfile.msg"
   "msg_content/QosServerStatus.msg"
+  "msg_content/ServiceResponseStatusConst.msg"
   "msg_content/TopicDeviceInfo.msg"
   "msg_content/TopicQosProfile.msg"
 )
+
+
 
 set(srv_files
   "srv/DevInfoReq.srv"
@@ -61,7 +73,13 @@ set(srv_files
   "srv/TopicDeviceInfoReg.srv"
   "srv/TopicQosProfileReg.srv"
   "srv/TopicQosProfileReq.srv"
-  )
+  "srv/control_signal/ControlSignalInfoReq.srv"
+  "srv/control_signal/ControlSignalJoy.srv"
+  "srv/control_signal/ControlSignalReg.srv"
+  "srv/control_signal/ControlSignalTwist.srv"
+)
+
+
 
 SET(PYLIB False CACHE BOOL "Some user-specified option")
 
@@ -93,12 +111,17 @@ elseif(${MY_ROS2_DISTRO} STREQUAL "humble")
     TARGETS cpplib
     DESTINATION local/lib/python3.10/dist-packages/${PROJECT_NAME}
   )
+elseif(${MY_ROS2_DISTRO} STREQUAL "jazzy")
+  install(
+    TARGETS cpplib
+    DESTINATION lib/${PROJECT_NAME}
+  )
 endif()
 
 else() # NOT PYLIB
 
 ## Build
-rosidl_generate_interfaces(${PROJECT_NAME} ${msg_content_files} ${srv_files} DEPENDENCIES builtin_interfaces sensor_msgs)
+rosidl_generate_interfaces(${PROJECT_NAME} ${msg_files} ${msg_content_files} ${srv_files} DEPENDENCIES builtin_interfaces sensor_msgs)
 
 
 ## Install
@@ -117,6 +140,18 @@ if(${MY_ROS2_DISTRO} STREQUAL "foxy")
     DESTINATION share/${PROJECT_NAME}
   )
 elseif(${MY_ROS2_DISTRO} STREQUAL "humble")
+  install(
+    DIRECTORY include/
+    DESTINATION include/${PROJECT_NAME}
+  )
+  ament_export_include_directories(
+    include
+  )
+  install(
+    FILES requirements_apt.txt
+    DESTINATION share/${PROJECT_NAME}
+  )
+elseif(${MY_ROS2_DISTRO} STREQUAL "jazzy")
   install(
     DIRECTORY include/
     DESTINATION include/${PROJECT_NAME}

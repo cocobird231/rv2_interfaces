@@ -1,0 +1,12 @@
+string source_csm_name                              # Source control signal manager name.
+ControlSignalInfo control_signal_source_info  # Control signal source information.
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# If target CSM create a keep-alive topic, return the topic name for source CSM to subscribe.
+string keep_alive_topic_name

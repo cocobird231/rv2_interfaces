@@ -1,0 +1,13 @@
+
+---
+# Response status, see ServiceResponseStatus for more information.
+int8 response
+
+# If response process failed, describe the reason.
+string reason
+
+# Managed control signal sources.
+ControlSignalInfo[] source_list
+
+# Managed control signal sinks.
+ControlSignalInfo[] sink_list
